@@ -108,6 +108,7 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); displa
 </style>
 </head>
 <body>
+<div id="fatalErrorBanner" style="display:none;position:sticky;top:0;z-index:99999;background:#5a2020;color:#fff;padding:12px 16px;font:14px/1.4 Arial,sans-serif;border-bottom:2px solid #ff8080;white-space:pre-wrap;"></div>
 <nav>
   <div class="nav-brand"><span class="mark">CMS</span> Lot Banner Generator</div>
   <button class="nav-tab active" onclick="showPage('generator', this)">Generator</button>
@@ -273,6 +274,19 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); displa
 <div class="toast" id="toast"></div>
 
 <script>
+function showFatalError(message) {
+  const el = document.getElementById('fatalErrorBanner');
+  if (!el) { alert(message); return; }
+  el.style.display = 'block';
+  el.textContent = message;
+}
+window.addEventListener('error', function (e) {
+  showFatalError('Page error: ' + (e.message || 'Unknown error') + (e.filename ? '\nFile: ' + e.filename : '') + (e.lineno ? '\nLine: ' + e.lineno : ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  const reason = e.reason && (e.reason.message || e.reason.toString()) || 'Unknown promise rejection';
+  showFatalError('Unhandled error: ' + reason);
+});
 // ═══════════════════════════
 // CONFIG — REPLACE THESE 3 VALUES ONCE
 // ═══════════════════════════
@@ -1209,14 +1223,19 @@ window.setType = setType;
 // INITIALIZE
 // ═══════════════════════════
 (function init() {
-  syncRepoForm();
-  updateRepoStatus();
-  updateTokenStatus();
-  if (sessionStorage.getItem(PIN_KEY) === '1') unlockAdmin();
-  fetchStateIndex().catch(err => {
-    console.warn(err);
-    renderLibrary();
-  });
+  try {
+    syncRepoForm();
+    updateRepoStatus();
+    updateTokenStatus();
+    if (sessionStorage.getItem(PIN_KEY) === '1') unlockAdmin();
+    fetchStateIndex().catch(err => {
+      console.warn(err);
+      renderLibrary();
+    });
+  } catch (err) {
+    console.error(err);
+    showFatalError('Initialization error: ' + (err.message || err.toString()));
+  }
 })();
 </script>
 </body>
