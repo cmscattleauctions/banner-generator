@@ -108,7 +108,6 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); displa
 </style>
 </head>
 <body>
-<div id="fatalErrorBanner" style="display:none;position:sticky;top:0;z-index:99999;background:#5a2020;color:#fff;padding:12px 16px;font:14px/1.4 Arial,sans-serif;border-bottom:2px solid #ff8080;white-space:pre-wrap;"></div>
 <nav>
   <div class="nav-brand"><span class="mark">CMS</span> Lot Banner Generator</div>
   <button class="nav-tab active" onclick="showPage('generator', this)">Generator</button>
@@ -274,19 +273,6 @@ nav { background: var(--surface); border-bottom: 1px solid var(--border); displa
 <div class="toast" id="toast"></div>
 
 <script>
-function showFatalError(message) {
-  const el = document.getElementById('fatalErrorBanner');
-  if (!el) { alert(message); return; }
-  el.style.display = 'block';
-  el.textContent = message;
-}
-window.addEventListener('error', function (e) {
-  showFatalError('Page error: ' + (e.message || 'Unknown error') + (e.filename ? '\nFile: ' + e.filename : '') + (e.lineno ? '\nLine: ' + e.lineno : ''));
-});
-window.addEventListener('unhandledrejection', function (e) {
-  const reason = e.reason && (e.reason.message || e.reason.toString()) || 'Unknown promise rejection';
-  showFatalError('Unhandled error: ' + reason);
-});
 // ═══════════════════════════
 // CONFIG — REPLACE THESE 3 VALUES ONCE
 // ═══════════════════════════
@@ -300,12 +286,113 @@ const STATES_DIR = 'assets/states';
 const REPO_CFG_KEY = 'cms_github_repo_config_v1';
 const TOKEN_KEY = 'cms_github_pat_session_v1';
 const PIN_KEY = 'cms_admin_pin_ok_v1';
+const LOCATION_OVERRIDE_KEY = 'cms_location_state_overrides_v1';
 
 // ═══════════════════════════
 // STATE INDEX (GITHUB-BACKED)
 // ═══════════════════════════
 let stateIndex = {};
 let stateIndexLoaded = false;
+
+function loadLocationOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(LOCATION_OVERRIDE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveLocationOverrides(map) {
+  localStorage.setItem(LOCATION_OVERRIDE_KEY, JSON.stringify(map || {}));
+}
+
+function normalizeLocationKey(str) {
+  return String(str || '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+function getLocationOverride(rawLocation) {
+  const key = normalizeLocationKey(rawLocation);
+  if (!key) return '';
+  const map = loadLocationOverrides();
+  return (map[key] || '').toUpperCase();
+}
+
+function setLocationOverride(rawLocation, stateAbbr) {
+  const key = normalizeLocationKey(rawLocation);
+  if (!key) return;
+  const map = loadLocationOverrides();
+  const clean = String(stateAbbr || '').trim().toUpperCase();
+  if (clean) map[key] = clean;
+  else delete map[key];
+  saveLocationOverrides(map);
+}
+
+async function promptForMissingStates() {
+  if (!allBanners.length) return;
+  const needsPrompt = [];
+  const seen = new Set();
+
+  for (const banner of allBanners) {
+    const rawKey = normalizeLocationKey(banner.rawLocation);
+    if (!rawKey || seen.has(rawKey)) continue;
+
+    const hasUsableState = !!banner.stateAbbr && !!getStateImageInfo(banner.stateAbbr);
+    if (!hasUsableState) {
+      seen.add(rawKey);
+      needsPrompt.push({
+        rawLocation: banner.rawLocation || '(blank)',
+        currentState: banner.stateAbbr || '',
+        reason: banner.stateAbbr ? `No uploaded image exists for ${banner.stateAbbr}.` : 'No state could be detected from the location.',
+      });
+    }
+  }
+
+  if (!needsPrompt.length) return;
+
+  for (const item of needsPrompt) {
+    const exampleLots = allBanners
+      .filter(b => normalizeLocationKey(b.rawLocation) === normalizeLocationKey(item.rawLocation))
+      .slice(0, 5)
+      .map(b => b.lotNumber)
+      .filter(Boolean);
+
+    const current = getLocationOverride(item.rawLocation) || item.currentState || '';
+    const promptMsg =
+`Choose a state for this location:
+
+Location:
+${item.rawLocation}
+
+Reason:
+${item.reason}
+
+Example lots:
+${exampleLots.join(', ') || 'N/A'}
+
+Enter a 2-letter state abbreviation like TX or NM.
+Leave blank and press OK to skip this location for now.`;
+
+    const answer = window.prompt(promptMsg, current);
+    if (answer === null) continue;
+
+    const clean = String(answer).trim().toUpperCase();
+    if (!clean) continue;
+
+    if (!/^[A-Z]{2}$/.test(clean)) {
+      showToast(`Skipped "${item.rawLocation}" because "${answer}" is not a valid 2-letter state.`, true);
+      continue;
+    }
+
+    setLocationOverride(item.rawLocation, clean);
+
+    allBanners.forEach(b => {
+      if (normalizeLocationKey(b.rawLocation) === normalizeLocationKey(item.rawLocation)) {
+        b.stateAbbr = clean;
+        b.locationDisplay = b.city ? `${b.city}, ${clean}` : clean;
+      }
+    });
+  }
+}
 
 function loadRepoConfig() {
   try {
@@ -705,12 +792,16 @@ function parseCSV(text) {
     const lotNumber = String(row['Lot Number'] || '').trim();
     const consignor = String(row['Consignor'] || '').trim();
     const loc = parseLocation(row['Location'] || '');
+    const rawLocation = String(row['Location'] || '').trim();
+    const overrideState = getLocationOverride(rawLocation);
+    const finalState = overrideState || loc.stateAbbr;
     return {
       lotNumber,
       consignor,
+      rawLocation,
       city: loc.city,
-      stateAbbr: loc.stateAbbr,
-      locationDisplay: loc.city && loc.stateAbbr ? `${loc.city}, ${loc.stateAbbr}` : loc.city
+      stateAbbr: finalState,
+      locationDisplay: loc.city && finalState ? `${loc.city}, ${finalState}` : (loc.city || finalState || rawLocation)
     };
   }).filter(b => b.lotNumber);
 }
@@ -722,6 +813,7 @@ async function loadCSV(file) {
   const text = await file.text();
   allBanners = parseCSV(text);
   await ensureStateIndex();
+  await promptForMissingStates();
   await renderAllBanners();
   updateStats();
   document.getElementById('statsRow').style.display = 'flex';
@@ -1223,19 +1315,14 @@ window.setType = setType;
 // INITIALIZE
 // ═══════════════════════════
 (function init() {
-  try {
-    syncRepoForm();
-    updateRepoStatus();
-    updateTokenStatus();
-    if (sessionStorage.getItem(PIN_KEY) === '1') unlockAdmin();
-    fetchStateIndex().catch(err => {
-      console.warn(err);
-      renderLibrary();
-    });
-  } catch (err) {
-    console.error(err);
-    showFatalError('Initialization error: ' + (err.message || err.toString()));
-  }
+  syncRepoForm();
+  updateRepoStatus();
+  updateTokenStatus();
+  if (sessionStorage.getItem(PIN_KEY) === '1') unlockAdmin();
+  fetchStateIndex().catch(err => {
+    console.warn(err);
+    renderLibrary();
+  });
 })();
 </script>
 </body>
