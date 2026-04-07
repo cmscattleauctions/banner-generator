@@ -6,7 +6,6 @@
 <title>CMS Lot Banner Generator</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -872,7 +871,7 @@ async function makeCard(banner) {
       <span class="lot-tag">LOT ${esc(banner.lotNumber)} &middot; ${esc(banner.locationDisplay)}</span>
       <div style="display:flex;gap:8px;align-items:center">
         ${!hasState ? `<span class="missing-badge">No state image</span>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="dlSingle('${esc(banner.lotNumber)}')">Download PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="dlSingle('${esc(banner.lotNumber)}')">Download PNG</button>
       </div>
     </div>`;
   card.querySelector('.banner-canvas-wrap').appendChild(canvas);
@@ -889,7 +888,7 @@ function updateStats() {
   const el = document.getElementById('missingAlert');
   if (missing.length > 0) {
     el.style.display = 'block';
-    el.innerHTML = `<strong>Missing state images:</strong> ${missing.join(', ')} — upload these in the State Library tab before generating PDFs.`;
+    el.innerHTML = `<strong>Missing state images:</strong> ${missing.join(', ')} — upload these in the State Library tab before generating banners.`;
   } else {
     el.style.display = 'none';
   }
@@ -913,7 +912,7 @@ function applySearch() {
 async function dlSingle(lotNumber) {
   const b = allBanners.find(x => x.lotNumber === lotNumber);
   if (!b) return;
-  canvasToPDF(await drawBannerAsync(b), `Lot_${lotNumber}_Banner.pdf`);
+  canvasToPNG(await drawBannerAsync(b), `Lot_${lotNumber}_Banner.png`);
 }
 
 async function dlAll() {
@@ -937,27 +936,26 @@ async function dlAll() {
     ptxt.textContent = `Generating Lot ${b.lotNumber}...`;
     await new Promise(r => setTimeout(r, 0));
     const canvas = await drawBannerAsync(b);
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:'landscape', unit:'in', format:[20, 2.0833] });
-    doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 20, 2.0833);
-    zip.file(`Lot_${b.lotNumber}_Banner.pdf`, doc.output('arraybuffer'));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    zip.file(`Lot_${b.lotNumber}_Banner.png`, blob);
   }
   ppct.textContent = '100%'; ptxt.textContent = 'Zipping...';
   const blob = await zip.generateAsync({ type:'blob' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'CMS_Lot_Banners.zip'; a.click();
+  a.href = url; a.download = 'CMS_Lot_Banners_PNG.zip'; a.click();
   URL.revokeObjectURL(url);
   wrap.classList.remove('active'); fill.style.width = '0';
   btn.disabled = false; btn.textContent = 'Download All as ZIP';
   showToast(`${list.length} banners downloaded`);
 }
 
-function canvasToPDF(canvas, filename) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:'landscape', unit:'in', format:[20, 2.0833] });
-  doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 20, 2.0833);
-  doc.save(filename);
+function canvasToPNG(canvas, filename) {
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
 }
 
 function setStyle(n, btn) {
