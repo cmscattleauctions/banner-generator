@@ -736,13 +736,22 @@ let allBanners = [];
 
 async function drawBannerAsync(banner) {
   const canvas = document.createElement('canvas');
-  canvas.width = BW; canvas.height = BH;
   const ctx = canvas.getContext('2d');
+
   if (currentType === 'option') {
+    canvas.width = 960;
+    canvas.height = BH;
+    ctx.scale(0.5, 1);
+
     if (currentStyle === 1) drawStyle1Option(ctx, banner);
     else drawStyle2Option(ctx, banner);
     return canvas;
   }
+
+  canvas.width = 3840;
+  canvas.height = BH * 2;
+  ctx.scale(2, 2);
+
   const url = getStateImageUrl(banner.stateAbbr);
   if (!url) {
     if (currentStyle === 1) drawStyle1Standard(ctx, banner, null);
