@@ -561,6 +561,8 @@ function loadImage(src) {
 // CANVAS CONSTANTS
 // ═══════════════════════════
 const BW = 1920, BH = 200;
+const EXPORT_STANDARD_W = 3840, EXPORT_STANDARD_H = 400;
+const EXPORT_OPTION_W = 960, EXPORT_OPTION_H = 200;
 const SKEW = Math.tan(29 * Math.PI / 180) * BH;
 const C_BG = '#dce4ef';
 const C_DARK = '#35679a';
@@ -575,6 +577,11 @@ function para(ctx, x0, w, color) {
   ctx.moveTo(x0 + SKEW, 0); ctx.lineTo(x0 + SKEW + w, 0);
   ctx.lineTo(x0 + w, BH); ctx.lineTo(x0, BH);
   ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+}
+
+function fitContain(srcW, srcH, maxW, maxH) {
+  const ratio = Math.min(maxW / srcW, maxH / srcH);
+  return { w: srcW * ratio, h: srcH * ratio };
 }
 
 function drawStyle1Standard(ctx, banner, img) {
@@ -689,13 +696,34 @@ function drawStyle2Standard(ctx, banner, img) {
   const lSz = Math.min(52, cSz - 10);
   ctx.font = OF(400, lSz);
   ctx.fillStyle = '#6a8ab8'; ctx.fillText(banner.locationDisplay, infoX, lY);
+
+  const statePanelW = 238;
+  const statePanelH = 144;
+  const statePanelX = BW - statePanelW - 34;
+  const statePanelY = (BH - statePanelH) / 2;
+
+  ctx.save();
+  ctx.fillStyle = '#d9e6f4';
+  ctx.shadowColor = 'rgba(53,103,154,0.14)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
+  ctx.fillRect(statePanelX, statePanelY, statePanelW, statePanelH);
+  ctx.restore();
+
+  ctx.strokeStyle = '#bccde1';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(statePanelX, statePanelY, statePanelW, statePanelH);
+
   if (img) {
-    const stH = Math.round(BH * 0.82), stW = Math.round(stateZoneW * 0.85);
-    ctx.drawImage(img, BW - stW - 30, (BH - stH) / 2, stW, stH);
+    const fit = fitContain(img.width || statePanelW, img.height || statePanelH, statePanelW * 0.84, statePanelH * 0.84);
+    const drawX = statePanelX + (statePanelW - fit.w) / 2;
+    const drawY = statePanelY + (statePanelH - fit.h) / 2;
+    ctx.drawImage(img, drawX, drawY, fit.w, fit.h);
   } else {
-    ctx.font = 'bold 18px Arial'; ctx.fillStyle = '#aaa';
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText(`[${banner.stateAbbr}]`, BW - 50, BH / 2);
+    ctx.font = 'bold 18px Arial'; ctx.fillStyle = '#8ea6c3';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`[${banner.stateAbbr}]`, statePanelX + statePanelW / 2, statePanelY + statePanelH / 2);
   }
   ctx.restore();
 }
@@ -736,21 +764,18 @@ let allBanners = [];
 
 async function drawBannerAsync(banner) {
   const canvas = document.createElement('canvas');
+  const exportW = currentType === 'option' ? EXPORT_OPTION_W : EXPORT_STANDARD_W;
+  const exportH = currentType === 'option' ? EXPORT_OPTION_H : EXPORT_STANDARD_H;
+  canvas.width = exportW;
+  canvas.height = exportH;
   const ctx = canvas.getContext('2d');
+  ctx.scale(exportW / BW, exportH / BH);
 
   if (currentType === 'option') {
-    canvas.width = 960;
-    canvas.height = BH;
-    ctx.scale(0.5, 1);
-
     if (currentStyle === 1) drawStyle1Option(ctx, banner);
     else drawStyle2Option(ctx, banner);
     return canvas;
   }
-
-  canvas.width = 3840;
-  canvas.height = BH * 2;
-  ctx.scale(2, 2);
 
   const url = getStateImageUrl(banner.stateAbbr);
   if (!url) {
