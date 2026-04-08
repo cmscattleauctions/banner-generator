@@ -579,9 +579,22 @@ function para(ctx, x0, w, color) {
   ctx.closePath(); ctx.fillStyle = color; ctx.fill();
 }
 
-function fitContain(srcW, srcH, maxW, maxH) {
-  const ratio = Math.min(maxW / srcW, maxH / srcH);
-  return { w: srcW * ratio, h: srcH * ratio };
+function makeCanvas(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function renderScaled(drawFn, width, height) {
+  const base = makeCanvas(BW, BH);
+  const baseCtx = base.getContext('2d');
+  drawFn(baseCtx);
+  const output = makeCanvas(width, height);
+  const outCtx = output.getContext('2d');
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.drawImage(base, 0, 0, width, height);
+  return output;
 }
 
 function drawStyle1Standard(ctx, banner, img) {
@@ -636,35 +649,76 @@ function drawStyle1Standard(ctx, banner, img) {
 }
 
 function drawStyle1Option(ctx, banner) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const localSkew = Math.tan(29 * Math.PI / 180) * H;
+  const panelW = 360;
   ctx.fillStyle = C_BG;
-  ctx.fillRect(0, 0, BW, BH);
-  const panelW = 640;
-  para(ctx, 0, panelW, C_DARK);
-  para(ctx, panelW, 8, C_WHITE);
-  para(ctx, panelW + 14, 4, C_WHITE);
-  para(ctx, panelW + 20, BW - panelW - 20 + SKEW + 40, C_WHITE);
-  const labelCX = panelW / 2 + SKEW * 0.3;
-  ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.beginPath();
+  ctx.moveTo(localSkew, 0);
+  ctx.lineTo(panelW + localSkew, 0);
+  ctx.lineTo(panelW, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = C_DARK;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(panelW + localSkew, 0);
+  ctx.lineTo(panelW + localSkew + 8, 0);
+  ctx.lineTo(panelW + 8, H);
+  ctx.lineTo(panelW, H);
+  ctx.closePath();
   ctx.fillStyle = C_WHITE;
-  ctx.font = OF(700, 82);
-  ctx.fillText('OPTION', labelCX, BH / 2 - 46);
-  ctx.fillText('THROUGH LOT', labelCX, BH / 2 + 46);
-  ctx.restore();
-  const rightStart = panelW + 20 + SKEW;
-  const rightCX = rightStart + (BW - rightStart) / 2;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(panelW + localSkew + 14, 0);
+  ctx.lineTo(W, 0);
+  ctx.lineTo(W - localSkew, H);
+  ctx.lineTo(panelW + 14, H);
+  ctx.closePath();
+  ctx.fillStyle = C_WHITE;
+  ctx.fill();
+
+  const leftBoxLeft = 0;
+  const leftBoxRight = panelW + localSkew;
+  const leftCX = (leftBoxLeft + leftBoxRight) / 2;
+  const rightBoxLeft = panelW + 14;
+  const rightBoxRight = W;
+  const rightCX = (rightBoxLeft + rightBoxRight) / 2;
+
   ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = OF(700, 140);
-  ctx.fillStyle = C_SHADOW; ctx.fillText(banner.lotNumber, rightCX + SDX, BH / 2 + SDY);
-  ctx.fillStyle = C_DARK; ctx.fillText(banner.lotNumber, rightCX, BH / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = C_WHITE;
+  ctx.font = OF(700, 52);
+  ctx.fillText('OPTION', leftCX, H / 2 - 40);
+  ctx.font = OF(700, 46);
+  ctx.fillText('THROUGH LOT', leftCX, H / 2 + 32);
+  ctx.restore();
+
+  let lotSize = 118;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = OF(700, lotSize);
+  while (ctx.measureText(String(banner.lotNumber || '')).width > (rightBoxRight - rightBoxLeft - 40) && lotSize > 84) {
+    lotSize -= 4;
+    ctx.font = OF(700, lotSize);
+  }
+  ctx.fillStyle = C_SHADOW;
+  ctx.fillText(banner.lotNumber, rightCX + SDX, H / 2 + SDY);
+  ctx.fillStyle = C_DARK;
+  ctx.fillText(banner.lotNumber, rightCX, H / 2);
   ctx.restore();
 }
 
 function drawStyle2Standard(ctx, banner, img) {
-  ctx.fillStyle = '#f0f4f8';
+  ctx.fillStyle = C_DARK;
   ctx.fillRect(0, 0, BW, BH);
-  ctx.fillStyle = '#c8d6e8';
+  ctx.fillStyle = '#6f94c4';
   ctx.fillRect(0, 0, BW, 4);
   ctx.fillRect(0, BH - 4, BW, 4);
   const lotStr = `LOT ${banner.lotNumber}`;
@@ -673,11 +727,11 @@ function drawStyle2Standard(ctx, banner, img) {
   ctx.save();
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   ctx.font = OF(700, fontSize);
-  ctx.fillStyle = C_SHADOW; ctx.fillText(lotStr, textX + SDX, textY + SDY);
-  ctx.fillStyle = C_DARK; ctx.fillText(lotStr, textX, textY);
+  ctx.fillStyle = 'rgba(12, 24, 40, 0.30)'; ctx.fillText(lotStr, textX + SDX, textY + SDY);
+  ctx.fillStyle = C_WHITE; ctx.fillText(lotStr, textX, textY);
   const lotW = ctx.measureText(lotStr).width;
   const divX = textX + lotW + 50;
-  ctx.fillStyle = '#c0d0e4';
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
   ctx.fillRect(divX, 28, 4, BH - 56);
   const infoX = divX + 50;
   const stateZoneW = 310;
@@ -692,66 +746,61 @@ function drawStyle2Standard(ctx, banner, img) {
   }
   const gap = Math.max(cSz * 0.95, 54);
   const cY = textY - gap * 0.5, lY = textY + gap * 0.5;
-  ctx.fillStyle = C_DARK; ctx.fillText(cStr, infoX, cY);
+  ctx.fillStyle = C_WHITE; ctx.fillText(cStr, infoX, cY);
   const lSz = Math.min(52, cSz - 10);
   ctx.font = OF(400, lSz);
-  ctx.fillStyle = '#6a8ab8'; ctx.fillText(banner.locationDisplay, infoX, lY);
-
-  const statePanelW = 238;
-  const statePanelH = 144;
-  const statePanelX = BW - statePanelW - 34;
-  const statePanelY = (BH - statePanelH) / 2;
-
-  ctx.save();
-  ctx.fillStyle = '#d9e6f4';
-  ctx.shadowColor = 'rgba(53,103,154,0.14)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 2;
-  ctx.fillRect(statePanelX, statePanelY, statePanelW, statePanelH);
-  ctx.restore();
-
-  ctx.strokeStyle = '#bccde1';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(statePanelX, statePanelY, statePanelW, statePanelH);
-
+  ctx.fillStyle = '#d7e4f5'; ctx.fillText(banner.locationDisplay, infoX, lY);
   if (img) {
-    const fit = fitContain(img.width || statePanelW, img.height || statePanelH, statePanelW * 0.84, statePanelH * 0.84);
-    const drawX = statePanelX + (statePanelW - fit.w) / 2;
-    const drawY = statePanelY + (statePanelH - fit.h) / 2;
-    ctx.drawImage(img, drawX, drawY, fit.w, fit.h);
+    const stH = Math.round(BH * 0.82), stW = Math.round(stateZoneW * 0.85);
+    ctx.drawImage(img, BW - stW - 30, (BH - stH) / 2, stW, stH);
   } else {
-    ctx.font = 'bold 18px Arial'; ctx.fillStyle = '#8ea6c3';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(`[${banner.stateAbbr}]`, statePanelX + statePanelW / 2, statePanelY + statePanelH / 2);
+    ctx.font = 'bold 18px Arial'; ctx.fillStyle = 'rgba(255,255,255,0.70)';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(`[${banner.stateAbbr}]`, BW - 50, BH / 2);
   }
   ctx.restore();
 }
 
 function drawStyle2Option(ctx, banner) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
   ctx.fillStyle = '#f0f4f8';
-  ctx.fillRect(0, 0, BW, BH);
+  ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#c8d6e8';
-  ctx.fillRect(0, 0, BW, 4);
-  ctx.fillRect(0, BH - 4, BW, 4);
-  const panelW = 580;
+  ctx.fillRect(0, 0, W, 4);
+  ctx.fillRect(0, H - 4, W, 4);
+
+  const dividerW = 4;
+  const leftW = Math.floor((W - dividerW) / 2);
+  const rightW = W - leftW - dividerW;
+
   ctx.fillStyle = C_DARK;
-  ctx.fillRect(0, 0, panelW, BH);
+  ctx.fillRect(0, 0, leftW, H);
+
   ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.fillStyle = C_WHITE;
-  ctx.font = OF(700, 74);
-  ctx.fillText('OPTION', panelW / 2, BH / 2 - 42);
-  ctx.fillText('THROUGH LOT', panelW / 2, BH / 2 + 42);
+  ctx.font = OF(700, 54);
+  ctx.fillText('OPTION', leftW / 2, H / 2 - 38);
+  ctx.font = OF(700, 48);
+  ctx.fillText('THROUGH LOT', leftW / 2, H / 2 + 30);
   ctx.restore();
+
   ctx.fillStyle = '#c0d0e4';
-  ctx.fillRect(panelW, 0, 4, BH);
-  const rightCX = panelW + 4 + (BW - panelW - 4) / 2;
+  ctx.fillRect(leftW, 0, dividerW, H);
+
+  const rightCX = leftW + dividerW + rightW / 2;
+  let lotSize = 122;
   ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = OF(700, 140);
-  ctx.fillStyle = C_SHADOW; ctx.fillText(banner.lotNumber, rightCX + SDX, BH / 2 + SDY);
-  ctx.fillStyle = C_DARK; ctx.fillText(banner.lotNumber, rightCX, BH / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = OF(700, lotSize);
+  while (ctx.measureText(String(banner.lotNumber || '')).width > (rightW - 36) && lotSize > 84) {
+    lotSize -= 4;
+    ctx.font = OF(700, lotSize);
+  }
+  ctx.fillStyle = C_SHADOW; ctx.fillText(banner.lotNumber, rightCX + SDX, H / 2 + SDY);
+  ctx.fillStyle = C_DARK; ctx.fillText(banner.lotNumber, rightCX, H / 2);
   ctx.restore();
 }
 
@@ -763,35 +812,26 @@ let currentType = 'standard';
 let allBanners = [];
 
 async function drawBannerAsync(banner) {
-  const canvas = document.createElement('canvas');
-  const exportW = currentType === 'option' ? EXPORT_OPTION_W : EXPORT_STANDARD_W;
-  const exportH = currentType === 'option' ? EXPORT_OPTION_H : EXPORT_STANDARD_H;
-  canvas.width = exportW;
-  canvas.height = exportH;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(exportW / BW, exportH / BH);
-
   if (currentType === 'option') {
+    const canvas = makeCanvas(EXPORT_OPTION_W, EXPORT_OPTION_H);
+    const ctx = canvas.getContext('2d');
     if (currentStyle === 1) drawStyle1Option(ctx, banner);
     else drawStyle2Option(ctx, banner);
     return canvas;
   }
 
+  const drawStandard = currentStyle === 1 ? drawStyle1Standard : drawStyle2Standard;
+
   const url = getStateImageUrl(banner.stateAbbr);
   if (!url) {
-    if (currentStyle === 1) drawStyle1Standard(ctx, banner, null);
-    else drawStyle2Standard(ctx, banner, null);
-    return canvas;
+    return renderScaled((ctx) => drawStandard(ctx, banner, null), EXPORT_STANDARD_W, EXPORT_STANDARD_H);
   }
   try {
     const img = await loadImage(url);
-    if (currentStyle === 1) drawStyle1Standard(ctx, banner, img);
-    else drawStyle2Standard(ctx, banner, img);
+    return renderScaled((ctx) => drawStandard(ctx, banner, img), EXPORT_STANDARD_W, EXPORT_STANDARD_H);
   } catch {
-    if (currentStyle === 1) drawStyle1Standard(ctx, banner, null);
-    else drawStyle2Standard(ctx, banner, null);
+    return renderScaled((ctx) => drawStandard(ctx, banner, null), EXPORT_STANDARD_W, EXPORT_STANDARD_H);
   }
-  return canvas;
 }
 
 // ═══════════════════════════
